@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, viewport-fit=cover" />
+  <title>Deontology Check</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    * {
+      box-sizing: border-box;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+    body {
+      background: #fdfdfd;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      background: #eee;
+      padding: 10px;
+      text-align: center;
+    }
+    .header select {
+      padding: 8px;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    .tab-nav {
+      display: flex;
+      justify-content: space-around;
+      background: #ddd;
+    }
+    .tab-nav button {
+      flex: 1;
+      padding: 10px;
+      font-size: 1rem;
+      border: none;
+      background: none;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .tab-nav button.active {
+      background: #d4edda;
+      font-weight: bold;
+    }
+    .tab {
+      flex: 1;
+      display: none;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    .tab.active {
+      display: block;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 1rem;
+      font-size: 2rem;
+      color: #333;
+    }
+    label, select, input[type="text"] {
+      display: block;
+      width: 100%;
+      margin-bottom: 0.8rem;
+      text-align: left;
+    }
+    input[type="text"], select {
+      padding: 0.5rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      background: #f9f9f9;
+    }
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 1rem;
+    }
+    .input-row input[type="text"] {
+      margin-bottom: 0;
+      flex: 1;
+    }
+    button.action {
+      padding: 0.6rem 1rem;
+      margin: 0.5rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      background: #6c9;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button.action:hover {
+      background: #58a;
+    }
+    .checklist {
+      list-style-type: none;
+      padding: 0;
+      margin-bottom: 1rem;
+    }
+    .checklist .item {
+      display: flex;
+      align-items: center;
+      padding: 10px;
+      margin-bottom: 8px;
+      border-radius: 5px;
+      background: #f0f0f0;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+    }
+    .checklist .item:not(.placeholder):hover {
+      cursor: move;
+    }
+    .checklist .deleteBtn {
+      margin-left: auto;
+      padding: 0.3rem 0.7rem;
+      border: none;
+      border-radius: 5px;
+      background: #e55;
+      color: #fff;
+      cursor: pointer;
+    }
+    .checklist .deleteBtn:hover {
+      background: #c44;
+    }
+    .checklist .item.checked {
+      background: #d4edda;
+      transform: scale(1.02);
+    }
+    .checklist input[type="checkbox"] {
+      margin-right: 10px;
+      transform: scale(1.2);
+      cursor: pointer;
+    }
+    .checklist .dragging {
+      opacity: 0.5;
+    }
+    .result {
+      font-weight: bold;
+      margin-top: 1rem;
+      font-size: 1.2rem;
+      min-height: 1.5em;
+      color: #555;
+    }
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 1.75rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <label for="interfaceLangSelect" id="interfaceLangLabel">Interface Language:</label>
+    <select id="interfaceLangSelect"></select>
+  </div>
+  <div class="tab-nav">
+    <button id="fabTabBtn" class="active">Fabrication</button>
+    <button id="consTabBtn">Consultation</button>
+  </div>
+  <div id="fabricationTab" class="tab active">
+    <div class="container">
+      <h1 id="fabTitle">Deontology Check – Fabrication</h1>
+      <label for="fabItemLangSelect" id="fabItemLangLabel">Item Language (Fabrication):</label>
+      <select id="fabItemLangSelect"></select>
+      <div class="input-row">
+        <input type="text" id="newItem" placeholder="Enter new checklist item">
+        <button id="okBtn" class="action">OK</button>
+      </div>
+      <ul id="fabChecklist" class="checklist"></ul>
+      <p id="autoSaved">(Items are auto-saved.)</p>
+    </div>
+  </div>
+  <div id="consultationTab" class="tab">
+    <div class="container">
+      <h1 id="consTitle">Deontology Check – Consultation</h1>
+      <label for="consItemLangSelect" id="consItemLangLabel">View Items In:</label>
+      <select id="consItemLangSelect"></select>
+      <ul id="consChecklist" class="checklist"></ul>
+      <div class="result" id="result"></div>
+      <button id="downloadBtn" class="action">Download Page</button>
+    </div>
+  </div>
+  <script>
+    let db;
+    const dbName = "ChecklistDB";
+    const storeName = "items";
+    async function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(dbName, 1);
+        request.onerror = () => reject("Error opening DB");
+        request.onsuccess = e => {
+          db = e.target.result;
+          resolve(db);
+        };
+        request.onupgradeneeded = e => {
+          db = e.target.result;
+          if (!db.objectStoreNames.contains(storeName)) {
+            db.createObjectStore(storeName, { keyPath: "id", autoIncrement: true });
+          }
+        };
+      });
+    }
+    async function getAllItems() {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([storeName], "readonly");
+        const store = transaction.objectStore(storeName);
+        const request = store.getAll();
+        request.onsuccess = e => {
+          let all = e.target.result.filter(item => item.text && item.text.trim() !== "");
+          resolve(all);
+        };
+        request.onerror = () => reject("Error fetching items");
+      });
+    }
+    async function saveItem(item) {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([storeName], "readwrite");
+        const store = transaction.objectStore(storeName);
+        let req = item.id ? store.put(item) : store.add(item);
+        req.onsuccess = e => {
+          if (!item.id) item.id = e.target.result;
+          resolve(item);
+        };
+        req.onerror = () => reject("Error saving item");
+      });
+    }
+    async function deleteItemFromDB(id) {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([storeName], "readwrite");
+        const store = transaction.objectStore(storeName);
+        const req = store.delete(id);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject("Error deleting item");
+      });
+    }
+    var interfaceTranslations = {
+      "en": {
+        headerLabel: "Interface Language:",
+        fabricationTab: "Fabrication",
+        consultationTab: "Consultation",
+        fabTitle: "Deontology Check – Fabrication",
+        consTitle: "Deontology Check – Consultation",
+        fabItemLangLabel: "Item Language (Fabrication):",
+        consItemLangLabel: "View Items In:",
+        placeholderNewItem: "Enter new checklist item",
+        autoSaved: "(Items are auto-saved.)",
+        downloadBtn: "Download Page",
+        okBtn: "OK",
+        deleteBtn: "Delete"
+      },
+      "fr": {
+        headerLabel: "Langue de l'interface :",
+        fabricationTab: "Fabrication",
+        consultationTab: "Consultation",
+        fabTitle: "Déontologie Check – Fabrication",
+        consTitle: "Déontologie Check – Consultation",
+        fabItemLangLabel: "Langue de l'item (Fabrication) :",
+        consItemLangLabel: "Voir les items dans :",
+        placeholderNewItem: "Nouveau point de la checklist",
+        autoSaved: "(Items enregistrés automatiquement.)",
+        downloadBtn: "Télécharger la page",
+        okBtn: "OK",
+        deleteBtn: "Supprimer"
+      },
+      "es": {
+        headerLabel: "Idioma de la interfaz:",
+        fabricationTab: "Fabricación",
+        consultationTab: "Consulta",
+        fabTitle: "Deontología Check – Fabricación",
+        consTitle: "Deontología Check – Consulta",
+        fabItemLangLabel: "Idioma del ítem (Fabricación):",
+        consItemLangLabel: "Ver ítems en:",
+        placeholderNewItem: "Ingrese nuevo ítem para la lista",
+        autoSaved: "(Ítems guardados automáticamente.)",
+        downloadBtn: "Descargar página",
+        okBtn: "OK",
+        deleteBtn: "Eliminar"
+      },
+      "de": {
+        headerLabel: "Interfacesprache:",
+        fabricationTab: "Herstellung",
+        consultationTab: "Beratung",
+        fabTitle: "Deontologie Check – Herstellung",
+        consTitle: "Deontologie Check – Beratung",
+        fabItemLangLabel: "Element-Sprache (Herstellung):",
+        consItemLangLabel: "Elemente anzeigen in:",
+        placeholderNewItem: "Neues Checklisten-Element eingeben",
+        autoSaved: "(Elemente werden automatisch gespeichert.)",
+        downloadBtn: "Seite herunterladen",
+        okBtn: "OK",
+        deleteBtn: "Löschen"
+      },
+      "it": {
+        headerLabel: "Lingua dell'interfaccia:",
+        fabricationTab: "Fabbricazione",
+        consultationTab: "Consultazione",
+        fabTitle: "Deontologia Check – Fabbricazione",
+        consTitle: "Deontologia Check – Consultazione",
+        fabItemLangLabel: "Lingua dell'item (Fabbricazione):",
+        consItemLangLabel: "Visualizza item in:",
+        placeholderNewItem: "Aggiungi nuovo elemento di checklist",
+        autoSaved: "(Elementi salvati automaticamente.)",
+        downloadBtn: "Scarica pagina",
+        okBtn: "OK",
+        deleteBtn: "Elimina"
+      },
+      "pt": {
+        headerLabel: "Idioma da interface:",
+        fabricationTab: "Fabricação",
+        consultationTab: "Consulta",
+        fabTitle: "Deontologia Check – Fabricação",
+        consTitle: "Deontologia Check – Consulta",
+        fabItemLangLabel: "Idioma do item (Fabricação):",
+        consItemLangLabel: "Ver itens em:",
+        placeholderNewItem: "Insira um novo item de checklist",
+        autoSaved: "(Itens salvos automaticamente.)",
+        downloadBtn: "Baixar página",
+        okBtn: "OK",
+        deleteBtn: "Excluir"
+      },
+      "nl": {
+        headerLabel: "Interface taal:",
+        fabricationTab: "Fabricage",
+        consultationTab: "Consultatie",
+        fabTitle: "Deontologie Check – Fabricage",
+        consTitle: "Deontologie Check – Consultatie",
+        fabItemLangLabel: "Itemtaal (Fabricage):",
+        consItemLangLabel: "Bekijk items in:",
+        placeholderNewItem: "Voer nieuw checklist-item in",
+        autoSaved: "(Items worden automatisch opgeslagen.)",
+        downloadBtn: "Pagina downloaden",
+        okBtn: "OK",
+        deleteBtn: "Verwijderen"
+      },
+      "sv": {
+        headerLabel: "Gränssnittsspråk:",
+        fabricationTab: "Tillverkning",
+        consultationTab: "Konsultation",
+        fabTitle: "Deontologi Check – Tillverkning",
+        consTitle: "Deontologi Check – Konsultation",
+        fabItemLangLabel: "Objektspråk (Tillverkning):",
+        consItemLangLabel: "Visa objekt i:",
+        placeholderNewItem: "Ange nytt checklisteobjekt",
+        autoSaved: "(Objekt sparas automatiskt.)",
+        downloadBtn: "Ladda ner sida",
+        okBtn: "OK",
+        deleteBtn: "Radera"
+      },
+      "no": {
+        headerLabel: "Grensesnittsspråk:",
+        fabricationTab: "Produksjon",
+        consultationTab: "Konsultasjon",
+        fabTitle: "Deontologi Check – Produksjon",
+        consTitle: "Deontologi Check – Konsultasjon",
+        fabItemLangLabel: "Språk for element (Produksjon):",
+        consItemLangLabel: "Vis elementer i:",
+        placeholderNewItem: "Legg til nytt sjekkliste-element",
+        autoSaved: "(Elementer lagres automatisk.)",
+        downloadBtn: "Last ned side",
+        okBtn: "OK",
+        deleteBtn: "Slett"
+      },
+      "fi": {
+        headerLabel: "Käyttöliittymän kieli:",
+        fabricationTab: "Valmistus",
+        consultationTab: "Konsultaatio",
+        fabTitle: "Deontologia Check – Valmistus",
+        consTitle: "Deontologia Check – Konsultaatio",
+        fabItemLangLabel: "Kohteen kieli (Valmistus):",
+        consItemLangLabel: "Näytä kohteet kielellä:",
+        placeholderNewItem: "Lisää uusi kohta tarkistuslistaan",
+        autoSaved: "(Kohteet tallennetaan automaattisesti.)",
+        downloadBtn: "Lataa sivu",
+        okBtn: "OK",
+        deleteBtn: "Poista"
+      },
+      "ru": {
+        headerLabel: "Язык интерфейса:",
+        fabricationTab: "Создание",
+        consultationTab: "Консультация",
+        fabTitle: "Деонтология Check – Создание",
+        consTitle: "Деонтология Check – Консультация",
+        fabItemLangLabel: "Язык элемента (Создание):",
+        consItemLangLabel: "Просмотр элементов на языке:",
+        placeholderNewItem: "Введите новый пункт списка",
+        autoSaved: "(Элементы сохраняются автоматически.)",
+        downloadBtn: "Скачать страницу",
+        okBtn: "OK",
+        deleteBtn: "Удалить"
+      },
+      "ja": {
+        headerLabel: "インターフェースの言語:",
+        fabricationTab: "作成",
+        consultationTab: "相談",
+        fabTitle: "デオントロジー Check – 作成",
+        consTitle: "デオントロジー Check – 相談",
+        fabItemLangLabel: "項目の言語（作成）:",
+        consItemLangLabel: "項目を表示する言語:",
+        placeholderNewItem: "チェックリスト項目を入力",
+        autoSaved: "(項目は自動的に保存されます.)",
+        downloadBtn: "ページをダウンロード",
+        okBtn: "OK",
+        deleteBtn: "削除"
+      },
+      "zh": {
+        headerLabel: "界面语言：",
+        fabricationTab: "制作",
+        consultationTab: "咨询",
+        fabTitle: "义务论 Check – 制作",
+        consTitle: "义务论 Check – 咨询",
+        fabItemLangLabel: "项目语言（制作）：",
+        consItemLangLabel: "查看项目所用语言：",
+        placeholderNewItem: "输入新检查项",
+        autoSaved: "（项目会自动保存。）",
+        downloadBtn: "下载页面",
+        okBtn: "OK",
+        deleteBtn: "删除"
+      },
+      "ar": {
+        headerLabel: "لغة الواجهة:",
+        fabricationTab: "الإنشاء",
+        consultationTab: "الاستشارة",
+        fabTitle: "ديونتولوجيا Check – الإنشاء",
+        consTitle: "ديونتولوجيا Check – الاستشارة",
+        fabItemLangLabel: "لغة العنصر (الإنشاء):",
+        consItemLangLabel: "عرض العناصر باللغة:",
+        placeholderNewItem: "أدخل عنصرًا جديدًا للقائمة",
+        autoSaved: "(يتم حفظ العناصر تلقائيًا.)",
+        downloadBtn: "تحميل الصفحة",
+        okBtn: "OK",
+        deleteBtn: "حذف"
+      },
+      "he": {
+        headerLabel: "שפת ממשק:",
+        fabricationTab: "יצירה",
+        consultationTab: "התייעצות",
+        fabTitle: "דאונטולוגיה Check – יצירה",
+        consTitle: "דאונטולוגיה Check – התייעצות",
+        fabItemLangLabel: "שפת הפריט (יצירה):",
+        consItemLangLabel: "הצג פריטים בשפה:",
+        placeholderNewItem: "הזן פריט חדש לרשימת הבדיקה",
+        autoSaved: "(הפריטים נשמרים אוטומטית.)",
+        downloadBtn: "הורד דף",
+        okBtn: "OK",
+        deleteBtn: "מחק"
+      },
+      "el": {
+        headerLabel: "Γλώσσα διεπαφής:",
+        fabricationTab: "Κατασκευή",
+        consultationTab: "Συμβουλή",
+        fabTitle: "Δεοντολογία Check – Κατασκευή",
+        consTitle: "Δεοντολογία Check – Συμβουλή",
+        fabItemLangLabel: "Γλώσσα στοιχείου (Κατασκευή):",
+        consItemLangLabel: "Προβολή στοιχείων σε:",
+        placeholderNewItem: "Προσθέστε νέο στοιχείο στη λίστα",
+        autoSaved: "(Τα στοιχεία αποθηκεύονται αυτόματα.)",
+        downloadBtn: "Λήψη σελίδας",
+        okBtn: "OK",
+        deleteBtn: "Διαγραφή"
+      },
+      "pl": {
+        headerLabel: "Język interfejsu:",
+        fabricationTab: "Tworzenie",
+        consultationTab: "Konsultacja",
+        fabTitle: "Deontologia Check – Tworzenie",
+        consTitle: "Deontologia Check – Konsultacja",
+        fabItemLangLabel: "Język elementu (Tworzenie):",
+        consItemLangLabel: "Wyświetl elementy w języku:",
+        placeholderNewItem: "Wpisz nowy element listy kontrolnej",
+        autoSaved: "(Elementy są zapisywane automatycznie.)",
+        downloadBtn: "Pobierz stronę",
+        okBtn: "OK",
+        deleteBtn: "Usuń"
+      },
+      "ro": {
+        headerLabel: "Limba interfeței:",
+        fabricationTab: "Fabricare",
+        consultationTab: "Consultație",
+        fabTitle: "Deontologie Check – Fabricare",
+        consTitle: "Deontologie Check – Consultație",
+        fabItemLangLabel: "Limba elementului (Fabricare):",
+        consItemLangLabel: "Vizualizează elementele în:",
+        placeholderNewItem: "Introduceți un element nou în listă",
+        autoSaved: "(Elementele sunt salvate automat.)",
+        downloadBtn: "Descarcă pagina",
+        okBtn: "OK",
+        deleteBtn: "Șterge"
+      },
+      "hu": {
+        headerLabel: "Felhasználói felület nyelve:",
+        fabricationTab: "Készítés",
+        consultationTab: "Konzultáció",
+        fabTitle: "Deontológia Check – Készítés",
+        consTitle: "Deontológia Check – Konzultáció",
+        fabItemLangLabel: "Elem nyelve (Készítés):",
+        consItemLangLabel: "Elemek megjelenítése ezen a nyelven:",
+        placeholderNewItem: "Írjon be egy új tételt a listához",
+        autoSaved: "(Az elemek automatikusan elmentésre kerülnek.)",
+        downloadBtn: "Oldal letöltése",
+        okBtn: "OK",
+        deleteBtn: "Törlés"
+      },
+      "cs": {
+        headerLabel: "Jazyk rozhraní:",
+        fabricationTab: "Tvorba",
+        consultationTab: "Konzultace",
+        fabTitle: "Deontologie Check – Tvorba",
+        consTitle: "Deontologie Check – Konzultace",
+        fabItemLangLabel: "Jazyk položky (Tvorba):",
+        consItemLangLabel: "Zobrazit položky v jazyce:",
+        placeholderNewItem: "Zadejte novou položku kontrolního seznamu",
+        autoSaved: "(Položky jsou ukládány automaticky.)",
+        downloadBtn: "Stáhnout stránku",
+        okBtn: "OK",
+        deleteBtn: "Smazat"
+      }
+    };
+    var interfaceLangSelect = document.getElementById("interfaceLangSelect");
+    var fabTabBtn = document.getElementById("fabTabBtn");
+    var consTabBtn = document.getElementById("consTabBtn");
+    var fabricationTab = document.getElementById("fabricationTab");
+    var consultationTab = document.getElementById("consultationTab");
+    var fabTitle = document.getElementById("fabTitle");
+    var consTitle = document.getElementById("consTitle");
+    var fabItemLangLabel = document.getElementById("fabItemLangLabel");
+    var consItemLangLabel = document.getElementById("consItemLangLabel");
+    var newItemInput = document.getElementById("newItem");
+    var okBtn = document.getElementById("okBtn");
+    var fabChecklist = document.getElementById("fabChecklist");
+    var autoSavedP = document.getElementById("autoSaved");
+    var consChecklist = document.getElementById("consChecklist");
+    var resultElement = document.getElementById("result");
+    var downloadBtn = document.getElementById("downloadBtn");
+    var interfaceLangLabel = document.getElementById("interfaceLangLabel");
+    var fabItemLangSelect = document.getElementById("fabItemLangSelect");
+    var consItemLangSelect = document.getElementById("consItemLangSelect");
+    let items = [];
+    function updateInterface() {
+      let lang = interfaceLangSelect.value;
+      let t = interfaceTranslations[lang] || interfaceTranslations["en"];
+      interfaceLangLabel.textContent = t.headerLabel;
+      fabTabBtn.textContent = t.fabricationTab;
+      consTabBtn.textContent = t.consultationTab;
+      fabTitle.textContent = t.fabTitle;
+      consTitle.textContent = t.consTitle;
+      fabItemLangLabel.textContent = t.fabItemLangLabel;
+      consItemLangLabel.textContent = t.consItemLangLabel;
+      newItemInput.placeholder = t.placeholderNewItem;
+      autoSavedP.textContent = t.autoSaved;
+      downloadBtn.textContent = t.downloadBtn;
+      okBtn.textContent = t.okBtn;
+      fabChecklist.querySelectorAll("button.deleteBtn").forEach(btn => {
+        btn.textContent = t.deleteBtn;
+      });
+      consChecklist.querySelectorAll("button.deleteBtn").forEach(btn => {
+        btn.textContent = t.deleteBtn;
+      });
+    }
+    function populateInterfaceLanguages() {
+      for (var lang in interfaceTranslations) {
+        var option = document.createElement("option");
+        option.value = lang;
+        option.textContent = lang.toUpperCase();
+        interfaceLangSelect.appendChild(option);
+      }
+    }
+    function populateItemLanguages(selectElement) {
+      for (var lang in interfaceTranslations) {
+        let opt = document.createElement("option");
+        opt.value = lang;
+        opt.textContent = lang.toUpperCase();
+        selectElement.appendChild(opt);
+      }
+    }
+
+    function renderFabricationList() {
+      fabChecklist.innerHTML = "";
+      let currentLang = fabItemLangSelect.value;
+      let filtered = items.filter(item => item.lang === currentLang);
+      filtered.sort((a, b) => (a.order || 0) - (b.order || 0));
+      filtered.forEach(item => {
+        let li = document.createElement("li");
+        li.className = "item";
+        li.draggable = true;
+        li.dataset.id = item.id;
+        if(item.checked) li.classList.add("checked");
+        let checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = item.checked;
+        checkbox.addEventListener("change", function() {
+          item.checked = checkbox.checked;
+          li.classList.toggle("checked", item.checked);
+          saveItem(item);
+          renderConsultationList();
+          updateConsultationResult();
+        });
+        li.appendChild(checkbox);
+        let span = document.createElement("span");
+        span.style.marginRight = "8px";
+        span.textContent = item.text;
+        li.appendChild(span);
+        let t = interfaceTranslations[interfaceLangSelect.value] || interfaceTranslations["en"];
+        let delBtn = document.createElement("button");
+        delBtn.className = "deleteBtn";
+        delBtn.textContent = t.deleteBtn;
+        delBtn.addEventListener("click", async function() {
+          await deleteItemFromDB(item.id);
+          items = items.filter(it => it.id !== item.id);
+          updateConsultationAccess();
+          renderFabricationList();
+          renderConsultationList();
+          updateConsultationResult();
+          populateConsultationLangs();
+          resetConsultationLangIfEmpty();
+        });
+        li.appendChild(delBtn);
+        li.addEventListener("dragstart", dragStart);
+        li.addEventListener("dragenter", dragEnter);
+        li.addEventListener("dragover", dragOver);
+        li.addEventListener("dragleave", dragLeave);
+        li.addEventListener("drop", dropItem);
+        li.addEventListener("dragend", dragEnd);
+        fabChecklist.appendChild(li);
+      });
+    }
+    okBtn.addEventListener("click", addNewItemFabrication);
+    newItemInput.addEventListener("keypress", e => {
+      if(e.key === "Enter") addNewItemFabrication();
+    });
+    consItemLangSelect.addEventListener("change", () => {
+      renderConsultationList();
+      updateConsultationResult();
+    });
+    function addNewItemFabrication() {
+      let text = newItemInput.value.trim();
+      if(!text) return;
+      let lang = fabItemLangSelect.value;
+      let newItem = {
+        lang: lang,
+        text: text,
+        order: Date.now(),
+        checked: false
+      };
+      saveItem(newItem).then(saved => {
+        items.push(saved);
+        updateConsultationAccess();
+        populateConsultationLangs();
+        resetConsultationLangIfEmpty();
+        newItemInput.value = "";
+        renderFabricationList();
+        renderConsultationList();
+        updateConsultationResult();
+      });
+    }
+    fabItemLangSelect.addEventListener("change", () => {
+      renderFabricationList();
+    });
+    let draggedItem = null;
+    function dragStart(e) {
+      draggedItem = this;
+      e.dataTransfer.effectAllowed = "move";
+      setTimeout(() => { this.classList.add("dragging"); }, 0);
+    }
+    function dragEnter(e) {
+      e.preventDefault();
+      this.classList.add("over");
+    }
+    function dragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    }
+    function dragLeave(e) {
+      this.classList.remove("over");
+    }
+    async function dropItem(e) {
+      e.preventDefault();
+      this.classList.remove("over");
+      if(draggedItem === this) return;
+      let currentLang = fabItemLangSelect.value;
+      let filtered = items.filter(it => it.lang === currentLang).sort((a,b)=>(a.order||0)-(b.order||0));
+      let draggedID = parseInt(draggedItem.dataset.id, 10);
+      let targetID = parseInt(this.dataset.id, 10);
+      let draggedIndex = filtered.findIndex(it => it.id === draggedID);
+      let targetIndex = filtered.findIndex(it => it.id === targetID);
+      if(draggedIndex < 0 || targetIndex < 0) return;
+      let temp = filtered[draggedIndex].order;
+      filtered[draggedIndex].order = filtered[targetIndex].order;
+      filtered[targetIndex].order = temp;
+      await saveItem(filtered[draggedIndex]);
+      await saveItem(filtered[targetIndex]);
+      renderFabricationList();
+      renderConsultationList();
+    }
+    function dragEnd(e) {
+      this.classList.remove("dragging");
+      fabChecklist.querySelectorAll(".item").forEach(li => {
+        li.classList.remove("over");
+      });
+      draggedItem = null;
+    }
+    function renderConsultationList() {
+      consChecklist.innerHTML = "";
+      let currentLang = consItemLangSelect.value;
+      let filtered = items.filter(item => item.lang === currentLang);
+      filtered.sort((a, b) => (a.order || 0) - (b.order || 0));
+      filtered.forEach(item => {
+        let li = document.createElement("li");
+        li.className = "item";
+        if(item.checked) li.classList.add("checked");
+        let checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = item.checked;
+        checkbox.addEventListener("change", function() {
+          item.checked = checkbox.checked;
+          li.classList.toggle("checked", item.checked);
+          saveItem(item);
+          renderFabricationList();
+          updateConsultationResult();
+        });
+        li.appendChild(checkbox);
+        let span = document.createElement("span");
+        span.textContent = item.text;
+        li.appendChild(span);
+        consChecklist.appendChild(li);
+      });
+    }
+    function updateConsultationAccess() {
+      // Vérifie s'il y a au moins une langue avec des items
+      const hasAnyItem = items.some(it => it.text && it.text.trim() !== "");
+      consTabBtn.disabled = !hasAnyItem; // true => désactive, false => active
+    }
+    function updateConsultationResult() {
+      let currentLang = consItemLangSelect.value;
+      let filtered = items.filter(it => it.lang === currentLang);
+      let allChecked = (filtered.length > 0) && filtered.every(it => it.checked);
+      resultElement.textContent = allChecked ? "Your decision is ethical." : "Your decision is not ethical.";
+    }
+    consTabBtn.addEventListener("click", () => {
+      consTabBtn.classList.add("active");
+      fabTabBtn.classList.remove("active");
+      consultationTab.classList.add("active");
+      fabricationTab.classList.remove("active");
+      renderConsultationList();
+      updateConsultationResult();
+    });
+    fabTabBtn.addEventListener("click", () => {
+      fabTabBtn.classList.add("active");
+      consTabBtn.classList.remove("active");
+      fabricationTab.classList.add("active");
+      consultationTab.classList.remove("active");
+    });
+    function downloadPage() {
+      let languageMap = {};
+      items.forEach(item => {
+        if(!languageMap[item.lang]) {
+          languageMap[item.lang] = [];
+        }
+        languageMap[item.lang].push(item);
+      });
+      Object.keys(languageMap).forEach(lang => {
+        if(languageMap[lang].length === 0) {
+          delete languageMap[lang];
+        }
+      });
+      let finalTranslations = {};
+      Object.keys(languageMap).forEach(lang => {
+        languageMap[lang].sort((a,b)=>(a.order||0)-(b.order||0));
+        let itemsArr = languageMap[lang].map(x => x.text);
+        finalTranslations[lang] = {
+          ethical: "Deontology",
+          langLabel: "Select your language:",
+          items: itemsArr,
+          result_ethical: "Your decision is ethical.",
+          result_not_ethical: "Your decision is not ethical."
+        };
+      });
+      let finalHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Deontology Check</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    * {
+      box-sizing: border-box;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+    body {
+      background: #fdfdfd;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .container {
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      max-width: 600px;
+      width: 100%;
+      padding: 30px;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 1rem;
+      font-size: 2rem;
+      color: #333;
+    }
+    select {
+      padding: 0.5rem;
+      margin-bottom: 1.5rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      background: #f9f9f9;
+    }
+    .checklist {
+      text-align: left;
+      margin-bottom: 1rem;
+    }
+    .checklist label {
+      display: flex;
+      align-items: center;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+      cursor: pointer;
+      background: #f0f0f0;
+    }
+    .checklist label input[type="checkbox"] {
+      margin-right: 10px;
+      transform: scale(1.2);
+      cursor: pointer;
+    }
+    .checklist label.checked {
+      background: #d4edda;
+      transform: scale(1.02);
+    }
+    .result {
+      font-weight: bold;
+      margin-top: 1rem;
+      font-size: 1.2rem;
+      min-height: 1.5em;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 id="title"></h1>
+    <label for="langSelect" id="langLabel"></label>
+    <select id="langSelect"></select>
+    <div class="checklist" id="checklist"></div>
+    <div class="result" id="result"></div>
+  </div>
+  <script>
+    var translations = ${JSON.stringify(finalTranslations, null, 2)};
+    var langSelect = document.getElementById("langSelect");
+    var titleElement = document.getElementById("title");
+    var langLabelElement = document.getElementById("langLabel");
+    var checklistContainer = document.getElementById("checklist");
+    var resultElement = document.getElementById("result");
+    var statesByLang = {};
+
+    function populateLanguages() {
+      langSelect.innerHTML = "";
+      let storedLang = localStorage.getItem("userLang");
+      let firstLang = null;
+      for (var lang in translations) {
+        if (!lang || lang === "undefined") continue;
+        var option = document.createElement("option");
+        option.value = lang;
+        option.textContent = lang.toUpperCase();
+        if (!firstLang) firstLang = lang;
+        langSelect.appendChild(option);
+      }
+      if (storedLang && translations[storedLang]) {
+        langSelect.value = storedLang;
+      } else {
+        if (firstLang) {
+          langSelect.value = firstLang;
+        }
+      }
+    }
+
+    function updateUI(lang) {
+      var storedStates = statesByLang[lang] || [];
+      var t = translations[lang];
+      titleElement.textContent = t.ethical + " Check";
+      langLabelElement.textContent = t.langLabel;
+      var checkboxes = checklistContainer.querySelectorAll("input[type=checkbox]");
+      var oldStates = [];
+      checkboxes.forEach(function(cb, i) {
+        oldStates[i] = cb.checked;
+      });
+      checklistContainer.innerHTML = "";
+      t.items.forEach(function(txt, i) {
+        var label = document.createElement("label");
+        var checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        if (storedStates[i]) {
+          checkbox.checked = true;
+          label.classList.add("checked");
+        }
+        checkbox.onchange = function() {
+          if (this.checked) label.classList.add("checked");
+          else label.classList.remove("checked");
+          checkAll();
+        };
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(txt));
+        checklistContainer.appendChild(label);
+      });
+      checkAll();
+    }
+
+    function checkAll() {
+      let allChecked = true;
+      var checkboxes = checklistContainer.querySelectorAll("input[type=checkbox]");
+      var currentLang = langSelect.value;
+      statesByLang[currentLang] = [];
+      checkboxes.forEach((cb, i) => {
+        statesByLang[currentLang][i] = cb.checked;
+        if (!cb.checked) {
+          allChecked = false;
+        }
+      });
+      if (!translations[currentLang]) {
+        resultElement.textContent = "";
+        return;
+      }
+      resultElement.textContent = allChecked
+        ? translations[currentLang].result_ethical
+        : translations[currentLang].result_not_ethical;
+    }
+
+    langSelect.addEventListener("change", function() {
+      localStorage.setItem("userLang", langSelect.value);
+      updateUI(langSelect.value);
+    });
+
+    populateLanguages();
+    updateUI(langSelect.value);
+  <\/script>
+</body>
+</html>
+`;
+      let blob = new Blob([finalHTML], { type: "text/html" });
+      let url = URL.createObjectURL(blob);
+      let a = document.createElement("a");
+      a.href = url;
+      a.download = "deontology_check.html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    downloadBtn.addEventListener("click", downloadPage);
+    function populateConsultationLangs() {
+      consItemLangSelect.innerHTML = "";
+      let usedLangs = new Set(
+        items
+          .filter(it => it.lang && it.text && it.text.trim() !== "")
+          .map(it => it.lang)
+      );
+      usedLangs.forEach(lang => {
+        let opt = document.createElement("option");
+        opt.value = lang;
+        opt.textContent = lang.toUpperCase();
+        consItemLangSelect.appendChild(opt);
+      });
+    }
+    function resetConsultationLangIfEmpty() {
+      // si la langue actuelle n'a plus d'items, prenez la première
+      let currentLang = consItemLangSelect.value;
+      let stillHasItems = items.some(it => it.lang === currentLang);
+      if(!stillHasItems && consItemLangSelect.options.length > 0) {
+        consItemLangSelect.value = consItemLangSelect.options[0].value;
+      }
+      renderConsultationList();
+      updateConsultationResult();
+    }
+    async function init() {
+      populateInterfaceLanguages();
+      populateItemLanguages(fabItemLangSelect);
+      populateItemLanguages(consItemLangSelect);
+      let userLang = (navigator.language || navigator.userLanguage).slice(0,2).toLowerCase();
+      if(!(userLang in interfaceTranslations)) { userLang = "en"; }
+      interfaceLangSelect.value = userLang;
+      fabItemLangSelect.value = userLang;
+      consItemLangSelect.value = userLang;
+      await openDB();
+      items = await getAllItems();
+      populateConsultationLangs();
+      resetConsultationLangIfEmpty();
+      updateInterface();
+      renderFabricationList();
+      renderConsultationList();
+      updateConsultationResult();
+    }
+    init().catch(console.error);
+    interfaceLangSelect.addEventListener("change", updateInterface);
+    updateConsultationAccess();
+  </script>
+</body>
+</html>
